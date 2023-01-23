@@ -8,37 +8,45 @@ namespace MegaNepEditor {
     public class Cat
     {
         Encoding Encoding = Encoding.GetEncoding(932);
-        StructReader Packget;
+        StructReader Package;
         uint DataBegin;
         Entry[] Entries = null;
         EntriesHeader Header = new EntriesHeader();
-        CatHeader PackgetHeader = new CatHeader();
+        CatHeader PackageHeader = new CatHeader();
         public Cat(Stream Packget) {
-            this.Packget = new StructReader(Packget, false, Encoding);
+            this.Package = new StructReader(Packget, false, Encoding);
         }
 
 
         public Entry[] Open() {
 
-            Packget.ReadStruct(ref PackgetHeader);
+            Package.ReadStruct(ref PackageHeader);
             
-            DataBegin = PackgetHeader.HeaderLen + 0x4;
-            Packget.BaseStream.Position = DataBegin;
+            DataBegin = PackageHeader.HeaderLen + 0x4;
+            Package.BaseStream.Position = DataBegin;
             
-            Packget.ReadStruct(ref Header);
+            Package.ReadStruct(ref Header);
 
             Entry[] Entries = new Entry[Header.Entries];
 
             for (uint i = 0; i < Header.Entries; i++) {
                 Entry Entry = new Entry();
 
-                if (PackgetHeader.Flags == 0x3) {
-                    Packget.Seek(Header.NamesOffset[i] + PackgetHeader.HeaderLen, SeekOrigin.Begin);
-                    Entry.FileName = Packget.ReadString(StringStyle.CString);
-                } else
-                    Entry.FileName = i.ToString("X8") + ".bin";
+                Entry.Content = new VirtStream(Package.BaseStream, Header.Offsets[i] + PackageHeader.HeaderLen, Header.Lengths[i]);
 
-                Entry.Content = new VirtStream(Packget.BaseStream, Header.Offsets[i] + PackgetHeader.HeaderLen, Header.Lengths[i]);
+                bool IsDPK = Entry.Content.IsDPK();
+
+                var Buffer = new byte[4];
+                Entry.Content.Read(Buffer, 0, 4);
+                Entry.Content.Position = 0;
+
+                int Magic = BitConverter.ToInt32(Buffer, 0);
+
+                if (PackageHeader.Flags == 0x3) {
+                    Package.Seek(Header.NamesOffset[i] + PackageHeader.HeaderLen, SeekOrigin.Begin);
+                    Entry.FileName = Package.ReadString(StringStyle.CString);
+                } else
+                    Entry.FileName = i.ToString("X8") + (IsDPK ? ".dpk" : ExtHelper.GetExtension(Magic));
 
                 Entries[i] = Entry;
             }
@@ -52,31 +60,31 @@ namespace MegaNepEditor {
                 Open();
 
             if (this.Entries.LongLength != Entries.LongLength)
-                throw new Exception("You can't add or remove files from the packget.");
+                throw new Exception("You can't add or remove files from the package.");
 
-            Packget.BaseStream.Position = 0x00;
+            Package.BaseStream.Position = 0x00;
             byte[] Buffer = new byte[DataBegin];
-            if (Packget.Read(Buffer, 0, Buffer.Length) != Buffer.Length)
+            if (Package.Read(Buffer, 0, Buffer.Length) != Buffer.Length)
                 throw new Exception("Failed to Copy the Static Header Data.");
 
             StructWriter Writer = new StructWriter(Output, false, Encoding);
             Writer.Write(Buffer, 0, Buffer.Length);
 
             //Recovery File Order
-            if (PackgetHeader.Flags != 0x3) {
+            if (PackageHeader.Flags != 0x3) {
                 Entries = Entries.OrderBy(x => Convert.ToUInt32(Path.GetFileNameWithoutExtension(x.FileName).Trim(), 16)).ToArray();
             }
 
-            uint ContentBegin = Header.Offsets.First() + PackgetHeader.HeaderLen;
+            uint ContentBegin = Header.Offsets.First() + PackageHeader.HeaderLen;
             uint BufferPos = ContentBegin;
             for (uint i = 0; i < Header.Offsets.Length; i++) { 
                 uint Length = (uint)Entries[i].Content.Length;
-                Header.Offsets[i] = BufferPos - PackgetHeader.HeaderLen;
+                Header.Offsets[i] = BufferPos - PackageHeader.HeaderLen;
                 Header.Lengths[i] = Length;
                 BufferPos += Length + (uint)AsserionRequired(Length);
 
-                if (PackgetHeader.Flags == 0x3) {
-                    Header.NamesOffset[i] = BufferPos - PackgetHeader.HeaderLen;
+                if (PackageHeader.Flags == 0x3) {
+                    Header.NamesOffset[i] = BufferPos - PackageHeader.HeaderLen;
 
                     uint StrLen = (uint)Encoding.GetByteCount(Entries[i].FileName + "\x0");
                     StrLen += (uint)AsserionRequired(StrLen);
@@ -90,8 +98,8 @@ namespace MegaNepEditor {
 
             if (Writer.BaseStream.Position < ContentBegin) {
                 Buffer = new byte[ContentBegin - Writer.BaseStream.Position];
-                Packget.BaseStream.Position = Writer.BaseStream.Position;
-                if (Packget.Read(Buffer, 0, Buffer.Length) != Buffer.Length)
+                Package.BaseStream.Position = Writer.BaseStream.Position;
+                if (Package.Read(Buffer, 0, Buffer.Length) != Buffer.Length)
                     throw new Exception("Failed to copy unk data");
 
                 Writer.Write(Buffer, 0, Buffer.Length);
@@ -105,7 +113,7 @@ namespace MegaNepEditor {
                 Writer.Write(Assertion);
 
 
-                if (PackgetHeader.Flags == 0x3) {
+                if (PackageHeader.Flags == 0x3) {
                     byte[] Data = Encoding.GetBytes(Entries[i].FileName + "\x0");                    
                     Assertion = new byte[AsserionRequired(Data.Length)];
                     Writer.Write(Data);
