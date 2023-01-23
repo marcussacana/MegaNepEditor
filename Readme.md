@@ -1,4 +1,4 @@
-# MegaNepEditor - v0.1
+# MegaNepEditor - v1.0.4
 
 Can Unpack and Repack "MegaTagmension Blanc + Neptune VS Zombies" .cat files
 
