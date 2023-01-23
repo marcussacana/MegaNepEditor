@@ -115,8 +115,8 @@ namespace MegaNepTool {
                 File.Delete(OutFile);
 
             Console.WriteLine("Repacking to {0}, Please Wait...", OutFile);
-            using (Stream NewPackget = new StreamWriter(OutFile).BaseStream)
-            using (Stream Original = new StreamReader(OriPackage).BaseStream)
+            using (Stream NewPackget = File.Open(OutFile, FileMode.CreateNew, FileAccess.ReadWrite))
+            using (Stream Original = File.Open(OriPackage, FileMode.Open, FileAccess.Read))
             {
                 Cat Manager = new Cat(Original);
                 Manager.Save(Entries, NewPackget);

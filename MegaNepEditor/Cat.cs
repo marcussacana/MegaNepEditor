@@ -13,8 +13,8 @@ namespace MegaNepEditor {
         Entry[] Entries = null;
         EntriesHeader Header = new EntriesHeader();
         CatHeader PackageHeader = new CatHeader();
-        public Cat(Stream Packget) {
-            this.Package = new StructReader(Packget, false, Encoding);
+        public Cat(Stream Package) {
+            this.Package = new StructReader(Package, false, Encoding);
         }
 
 
@@ -91,7 +91,6 @@ namespace MegaNepEditor {
 
                     BufferPos += StrLen;
                 }
-
             }
 
             Writer.WriteStruct(ref Header);
@@ -121,6 +120,46 @@ namespace MegaNepEditor {
                 }
             }
 
+            uint OriDataEnd = Header.Lengths.Last() + Header.Offsets.Last() + PackageHeader.HeaderLen;
+            uint NewDataEnd = (uint)Writer.BaseStream.Position;
+
+
+            Writer.BaseStream.Position = 0x10;
+
+
+            byte[] tmp = new byte[4];
+            Writer.BaseStream.Read(tmp, 0, tmp.Length);
+            Writer.BaseStream.Position -= 4;
+
+            int UnkOffset = BitConverter.ToInt32(tmp, 0);
+            UnkOffset += ((int)NewDataEnd - (int)OriDataEnd);
+
+            BitConverter.GetBytes(UnkOffset).CopyTo(tmp, 0);
+            Writer.BaseStream.Write(tmp, 0, tmp.Length);
+
+            int ReamingData = ((int)NewDataEnd - (int)OriDataEnd);
+
+            if (PackageHeader.UnkCount == 0x2 && ReamingData > 0)
+            {
+
+                Writer.BaseStream.Read(tmp, 0, tmp.Length);
+                Writer.BaseStream.Position -= 4;
+
+                UnkOffset = BitConverter.ToInt32(tmp, 0);
+                UnkOffset += ((int)NewDataEnd - (int)OriDataEnd);
+
+                BitConverter.GetBytes(UnkOffset).CopyTo(tmp, 0);
+                Writer.BaseStream.Write(tmp, 0, tmp.Length);
+            }
+
+            if (ReamingData > 0)
+            {
+                Package.BaseStream.Position = OriDataEnd;
+                Writer.BaseStream.Position = NewDataEnd;
+
+                Package.BaseStream.CopyTo(Writer.BaseStream);
+            }
+
             Writer.Flush();
         }
 
@@ -136,7 +175,7 @@ namespace MegaNepEditor {
 
     public struct CatHeader {
         public uint Flags;//Not Sure, Maybe Version
-        public uint UnkCount;
+        public uint UnkCount; // Section Count?
         public uint Unk2;
         public uint HeaderLen;   
     }
