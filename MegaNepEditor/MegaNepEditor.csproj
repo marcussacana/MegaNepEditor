@@ -39,6 +39,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AdvBin.cs" />
+    <Compile Include="AdvBinHelper.cs" />
+    <Compile Include="BIN.cs" />
     <Compile Include="Cat.cs" />
     <Compile Include="ExtHelper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
