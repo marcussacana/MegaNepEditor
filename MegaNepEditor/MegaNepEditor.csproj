@@ -41,12 +41,19 @@
   <ItemGroup>
     <Compile Include="AdvBin.cs" />
     <Compile Include="AdvBinHelper.cs" />
+    <Compile Include="B2NCounted.cs" />
+    <Compile Include="B2N.cs" />
     <Compile Include="BIN.cs" />
     <Compile Include="Cat.cs" />
+    <Compile Include="CatV2.cs" />
+    <Compile Include="CatV3.cs" />
     <Compile Include="ExtHelper.cs" />
+    <Compile Include="FontSizeParser.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="StructStream.cs" />
     <Compile Include="DPK.cs" />
+    <Compile Include="TAMS.cs" />
+    <Compile Include="TAMSHelper.cs" />
     <Compile Include="VirtStream.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

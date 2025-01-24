@@ -1,7 +1,9 @@
 ﻿using MegaNepEditor;
 using System;
+using System.Data;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 
 namespace MegaNepTool {
@@ -18,13 +20,25 @@ namespace MegaNepTool {
                 {
                     ExtractCat(arg);
                 }
-                else if (File.Exists(arg) && (low.EndsWith(".dpk") || low.EndsWith(".lds")))
+                else if (File.Exists(arg) && low.EndsWith("font_size_data.bin"))
+                {
+                    DumpFontInfo(arg);
+                }
+                else if (File.Exists(arg) && low.EndsWith("font_size_data.bin.txt"))
+                {
+                    CreateFontInfo(arg);
+                }
+                else if (File.Exists(arg) && (low.EndsWith(".dpk") || low.EndsWith(".lds") || low.EndsWith(".gxt")))
                 {
                     ExtractDPK(arg);
                 }
                 else if (File.Exists(arg) && (low.EndsWith(".bin")))
                 {
                     ExtractText(arg);
+                }
+                else if (File.Exists(arg) && (low.EndsWith(".b2n")))
+                {
+                    ExtractTextB2N(arg);
                 }
                 else if (File.Exists(arg) && (low.EndsWith(".txt")))
                 {
@@ -39,6 +53,32 @@ namespace MegaNepTool {
             Console.ReadKey();
         }
 
+        private static void DumpFontInfo(string arg)
+        {
+            Console.WriteLine("Dumping: " + Path.GetFileName(arg));
+
+            var PlainPath = arg + ".txt";
+
+            var Data = File.ReadAllBytes(arg);
+            var FontParser = new FontSizeParser(Data);
+            File.WriteAllLines(PlainPath, FontParser.Import());
+        }
+
+        private static void CreateFontInfo(string arg)
+        {
+            var BinPath = arg.Substring(0, arg.LastIndexOf("."));
+
+            Console.WriteLine("Creating: " + Path.GetFileName(BinPath));
+
+
+            var Data = File.ReadAllBytes(BinPath);
+            var FontParser = new FontSizeParser(Data);
+            var FontData = File.ReadAllLines(arg);
+            var NewData = FontParser.Export(FontData);
+
+            File.WriteAllBytes(BinPath + ".new", NewData);
+        }
+
         private static void ExtractText(string arg)
         {
             Console.WriteLine("Dumping: " + Path.GetFileName(arg));
@@ -49,9 +89,55 @@ namespace MegaNepTool {
                 ExtractAdvText(arg);
                 return;
             }
+
+            var data = File.ReadAllBytes(arg);
+
+            if (TAMS.IsTAMS(data))
+            {
+                ExtractTAMS(arg, data);
+                return;
+            }
+
             try
             {
-                BIN Parser = new BIN(File.ReadAllBytes(arg));
+                BIN Parser = new BIN(data);
+                var Lines = Parser.Import().Select(x => x.Replace("\n", "\\n")).ToArray();
+                File.WriteAllLines(arg + ".txt", Lines);
+            }
+            catch
+            {
+                ExtractAdvText(arg);
+            }
+        }
+
+        private static void ExtractTAMS(string arg, byte[] data)
+        {
+            Console.WriteLine("! TAMS Detected !");
+            var Parser = new TAMS(data);
+            var Lines = Parser.Import().Select(x => x.Replace("\n", "\\n")).ToArray();
+            File.WriteAllLines(arg + ".txt", Lines);
+        }
+
+        private static void ExtractTextB2N(string arg)
+        {
+            Console.WriteLine("Dumping: " + Path.GetFileName(arg));
+
+            try
+            {
+                var Parser = new B2N(File.ReadAllBytes(arg));
+                var Lines = Parser.Import().Select(x => x.Replace("\n", "\\n")).ToArray();
+                File.WriteAllLines(arg + ".txt", Lines);
+            }
+            catch
+            {
+                ExtractTextB2NCounted(arg);
+            }
+        }
+        private static void ExtractTextB2NCounted(string arg)
+        {
+            try
+            {
+                var Parser = new B2NCounted(File.ReadAllBytes(arg));
                 var Lines = Parser.Import().Select(x => x.Replace("\n", "\\n")).ToArray();
                 File.WriteAllLines(arg + ".txt", Lines);
             }
@@ -76,14 +162,30 @@ namespace MegaNepTool {
 
             bool IsAdvBin = arg.ToUpper().Contains("ADV");
 
+            bool IsB2N = arg.ToUpper().Contains("B2N");
+
             if (IsAdvBin) {
                 InsertAdvText(binPath, arg);
                 return;
             }
 
+            if (IsB2N)
+            {
+                InsertB2NText(binPath, arg);
+                return;
+            }
+
+            var data = File.ReadAllBytes(binPath);
+
+            if (TAMS.IsTAMS(data))
+            {
+                InsertTAMS(binPath, arg);
+                return;
+            }
+
             try
             {
-                BIN Parser = new BIN(File.ReadAllBytes(binPath));
+                BIN Parser = new BIN(data);
                 Parser.Import();
                 var newLines = File.ReadAllLines(arg).Select(x => x.Replace("\\n", "\n")).ToArray();
 
@@ -97,10 +199,51 @@ namespace MegaNepTool {
             }
         }
 
+        private static void InsertTAMS(string binPath, string textPath)
+        {
+            Console.WriteLine("! TAMS Detected !");
+            var Parser = new TAMS(File.ReadAllBytes(binPath));
+            Parser.Import();
+            var newLines = File.ReadAllLines(textPath).Select(x => x.Replace("\\n", "\n")).ToArray();
+
+            var newData = Parser.Export(newLines);
+
+            File.WriteAllBytes(binPath + ".new", newData);
+        }
+
         private static void InsertAdvText(string binPath, string textPath)
         {
             Console.WriteLine("! AdvBin Detected !");
             var Parser = new AdvBinHelper(File.ReadAllBytes(binPath));
+            Parser.Import();
+            var newLines = File.ReadAllLines(textPath).Select(x => x.Replace("\\n", "\n")).ToArray();
+
+            var newData = Parser.Export(newLines);
+
+            File.WriteAllBytes(binPath + ".new", newData);
+        }
+
+        private static void InsertB2NText(string binPath, string textPath)
+        {
+            Console.WriteLine("! B2N Detected !");
+            try
+            {
+                var Parser = new B2N(File.ReadAllBytes(binPath));
+                Parser.Import();
+                var newLines = File.ReadAllLines(textPath).Select(x => x.Replace("\\n", "\n")).ToArray();
+
+                var newData = Parser.Export(newLines);
+
+                File.WriteAllBytes(binPath + ".new", newData);
+            } 
+            catch 
+            {
+                InsertB2NCountedText(binPath, textPath);
+            }
+        }
+        private static void InsertB2NCountedText(string binPath, string textPath)
+        {
+            var Parser = new B2NCounted(File.ReadAllBytes(binPath));
             Parser.Import();
             var newLines = File.ReadAllLines(textPath).Select(x => x.Replace("\\n", "\n")).ToArray();
 
@@ -139,39 +282,120 @@ namespace MegaNepTool {
 
         public static void ExtractCat(string Cat)
         {
-            using (Stream Reader = new StreamReader(Cat).BaseStream)
+            try
             {
-                Cat Packget = new Cat(Reader);
-
-                Entry[] Entries = Packget.Open();
-
-                string OutDir = Cat + "~\\";
-                if (!Directory.Exists(OutDir))
-                    Directory.CreateDirectory(OutDir);
-
-                foreach (Entry Entry in Entries)
+                using (Stream Reader = new StreamReader(Cat).BaseStream)
                 {
-                    Console.WriteLine("Extracting: {0}", Entry.FileName);
-                    string OutFile = OutDir + Entry.FileName;
-                    if (File.Exists(OutFile))
-                        File.Delete(OutFile);
+                    Cat Packget = new Cat(Reader);
 
-                    using (Stream Writer = new StreamWriter(OutFile).BaseStream)
+                    Entry[] Entries = Packget.Open();
+
+                    string OutDir = Cat + "~\\";
+                    if (!Directory.Exists(OutDir))
+                        Directory.CreateDirectory(OutDir);
+
+                    foreach (Entry Entry in Entries)
                     {
-                        Entry.Content.CopyTo(Writer);
-                        Writer.Flush();
-                        Writer.Close();
+                        Console.WriteLine("Extracting: {0}", Entry.FileName);
+                        string OutFile = OutDir + Entry.FileName;
+                        if (File.Exists(OutFile))
+                            File.Delete(OutFile);
+
+                        using (Stream Writer = new StreamWriter(OutFile).BaseStream)
+                        {
+                            Entry.Content.CopyTo(Writer);
+                            Writer.Flush();
+                            Writer.Close();
+                        }
                     }
                 }
+            }
+            catch
+            {
+                ExtractCatV2(Cat);
+            }
+        }
+        public static void ExtractCatV2(string Cat)
+        {
+            try { 
+                using (Stream Reader = new StreamReader(Cat).BaseStream)
+                {
+
+                    Entry[] Entries = CatV2.Open(Reader);
+
+                    string OutDir = Cat + "v2~\\";
+                    if (!Directory.Exists(OutDir))
+                        Directory.CreateDirectory(OutDir);
+
+                    foreach (Entry Entry in Entries)
+                    {
+                        Console.WriteLine("Extracting: {0}", Entry.FileName);
+                        string OutFile = OutDir + Entry.FileName;
+                        if (File.Exists(OutFile))
+                            File.Delete(OutFile);
+
+                        using (Stream Writer = new StreamWriter(OutFile).BaseStream)
+                        {
+                            Entry.Content.CopyTo(Writer);
+                            Writer.Flush();
+                            Writer.Close();
+                        }
+                    }
+                }
+            } catch {
+                ExtractCatV3(Cat);
+            }
+        }
+        public static void ExtractCatV3(string Cat)
+        {
+            try
+            {
+                using (Stream Reader = new StreamReader(Cat).BaseStream)
+                {
+
+                    var Entries = CatV3.Open(Reader);
+
+                    string OutDir = Cat + "v3~\\";
+                    if (!Directory.Exists(OutDir))
+                        Directory.CreateDirectory(OutDir);
+
+                    foreach (var Entry in Entries)
+                    {
+                        Console.WriteLine("Extracting: {0}", Entry.FileName);
+                        string OutFile = OutDir + Entry.FileName;
+                        if (File.Exists(OutFile))
+                            File.Delete(OutFile);
+
+                        using (Stream Writer = new StreamWriter(OutFile).BaseStream)
+                        {
+                            Entry.Content.CopyTo(Writer);
+                            Writer.Flush();
+                            Writer.Close();
+                        }
+                    }
+                }
+            }
+            catch
+            {
+
             }
         }
 
         public static void PackCat(string Folder)
         {
-
+            if (Folder.EndsWith("v2~"))
+            {
+                PackCatV2(Folder);
+                return;
+            }
+            if (Folder.EndsWith("v3~"))
+            {
+                PackCatV3(Folder);
+                return;
+            }
             string OriPackage = Folder.TrimEnd('\\', '/', ' ', '~');
             var low = OriPackage.ToLowerInvariant();
-            if (low.EndsWith(".dpk") || low.EndsWith(".lds"))
+            if (low.EndsWith(".dpk") || low.EndsWith(".lds") || low.EndsWith(".gxt"))
             {
                 PackDpk(Folder);
                 return;
@@ -203,6 +427,82 @@ namespace MegaNepTool {
             }
 
             foreach (Entry Entry in Entries)
+                try
+                {
+                    Entry.Content?.Close();
+                }
+                catch { }
+        }
+
+        public static void PackCatV2(string Folder)
+        {
+
+            string OriPackage = Folder.TrimEnd('\\', '/', ' ', '~');
+            OriPackage = OriPackage.Substring(0, OriPackage.Length - 2);
+
+            string OutFile = OriPackage + ".new";
+            if (!File.Exists(OriPackage))
+            {
+                Console.WriteLine("Failed to Repack: \"{0}\" Not Found", OriPackage);
+                return;
+            }
+
+            Entry[] Entries = (from x in Directory.GetFiles(Folder)
+                               select new Entry()
+                               {
+                                   FileName = Path.GetFileName(x),
+                                   Content = new StreamReader(x).BaseStream
+                               }).ToArray();
+
+            if (File.Exists(OutFile))
+                File.Delete(OutFile);
+
+            Console.WriteLine("Repacking to {0}, Please Wait...", OutFile);
+            using (Stream NewPackget = File.Open(OutFile, FileMode.CreateNew, FileAccess.ReadWrite))
+            using (Stream Original = File.Open(OriPackage, FileMode.Open, FileAccess.Read))
+            {
+                CatV2.Save(Entries, NewPackget);
+            }
+
+            foreach (Entry Entry in Entries)
+                try
+                {
+                    Entry.Content?.Close();
+                }
+                catch { }
+        }
+
+        public static void PackCatV3(string Folder)
+        {
+
+            string OriPackage = Folder.TrimEnd('\\', '/', ' ', '~');
+            OriPackage = OriPackage.Substring(0, OriPackage.Length - 2);
+
+            string OutFile = OriPackage + ".new";
+            if (!File.Exists(OriPackage))
+            {
+                Console.WriteLine("Failed to Repack: \"{0}\" Not Found", OriPackage);
+                return;
+            }
+
+            var Entries = (from x in Directory.GetFiles(Folder)
+                               select new CatV3.NamedEntry()
+                               {
+                                   FileName = Path.GetFileName(x),
+                                   Content = new StreamReader(x).BaseStream
+                               }).ToArray();
+
+            if (File.Exists(OutFile))
+                File.Delete(OutFile);
+
+            Console.WriteLine("Repacking to {0}, Please Wait...", OutFile);
+            using (Stream NewPackget = File.Open(OutFile, FileMode.CreateNew, FileAccess.ReadWrite))
+            using (Stream Original = File.Open(OriPackage, FileMode.Open, FileAccess.Read))
+            {
+                CatV3.Save(Entries, NewPackget);
+            }
+
+            foreach (var Entry in Entries)
                 try
                 {
                     Entry.Content?.Close();

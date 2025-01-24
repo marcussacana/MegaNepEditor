@@ -54,7 +54,7 @@ namespace MegaNepEditor
             return AdvBin.Export(FullLines.ToArray());
         }
 
-        private void SplitLines(string FullLine, out string[] Lines, out string Format)
+        public static void SplitLines(string FullLine, out string[] Lines, out string Format)
         {
             var OriLines = FullLine.Split('\n');
 

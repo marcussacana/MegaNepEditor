@@ -27,6 +27,7 @@ namespace MegaNepEditor {
             
             Package.ReadStruct(ref Header);
 
+
             Entry[] Entries = new Entry[Header.Entries];
 
             for (uint i = 0; i < Header.Entries; i++) {
